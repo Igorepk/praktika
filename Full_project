@@ -1,0 +1,185 @@
+from traceback import print_tb
+from pathlib import Path
+import requests
+import pygame
+import sys
+import os
+import random
+
+from pygame import MOUSEBUTTONDOWN, MOUSEBUTTONUP, MOUSEMOTION, FULLSCREEN
+
+DEFAULT_IMAGE_SIZE = (50, 50)
+image_1 = pygame.transform.scale(pygame.image.load('forest_left.png'),DEFAULT_IMAGE_SIZE)
+image_2 = pygame.transform.scale(pygame.image.load('forest_right.png'),DEFAULT_IMAGE_SIZE)
+
+
+def download():
+    GRAPHQL_ENDPOINT = "https://graph.nordavind.ru/subgraphs/name/the-wall-polygon"
+    DOWNLOAD_ENDPOINT = "https://thewall.global/api/download/"
+    OWNER = "0x2c758d4cfc4da0cc3c680778b224232fa5610d33"
+    X_MIN, X_MAX = 39, 61
+    Y_MIN, Y_MAX = 13, 44
+    SAVE_DIR = Path("C:/Users/1/PycharmProjects/puzzle/pictures_1")
+    SAVE_DIR.mkdir(exist_ok=True)
+
+    # GraphQL-запрос
+    query = """
+    {
+      items(
+        where: {
+          area_: {
+            x_gte: %d, 
+            x_lte: %d, 
+            y_gte: %d, 
+            y_lte: %d
+          }, 
+          owner: "%s"
+        },
+        first: 1000
+      ) {
+        area {
+          x
+          y
+          imageCID
+        }
+      }
+    }
+    """ % (X_MIN, X_MAX, Y_MIN, Y_MAX, OWNER)
+
+    # Отправка запроса
+    response = requests.post(GRAPHQL_ENDPOINT, json={'query': query})
+    response.raise_for_status()
+    data = response.json()["data"]["items"]
+
+    # Сортировка: сначала по y по убыванию (сверху вниз), потом по x по возрастанию (слева направо)
+    sorted_items = sorted(data, key=lambda i: (-int(i["area"]["y"]), int(i["area"]["x"])))
+
+    # Скачивание изображений
+    for idx, item in enumerate(sorted_items, start=1):
+        img_url = item["area"]["imageCID"][0]
+        if not img_url:
+            print(f"Пропущена область без изображения: x={item['area']['x']}, y={item['area']['y']}")
+            continue
+        print(f"Скачиваю {img_url} -> {idx}.jpg")
+        img_response = requests.get(DOWNLOAD_ENDPOINT + img_url) # Загрузка картинки: ссылка на endpoint для загрузки + CID картинки из графа
+        img_response.raise_for_status()
+        with open(SAVE_DIR / f"{idx}.webp", "wb") as f:
+            f.write(img_response.content)
+
+    print("Готово.")
+
+images = []
+image = []
+o = 0
+for filename in os.listdir("C:/Users/1/PycharmProjects/puzzle/pictures_1"):
+    images.append(filename)
+    image.append(pygame.transform.scale(pygame.image.load(f"pictures_1/{images[o]}"), DEFAULT_IMAGE_SIZE))
+    o += 1
+    print(filename)
+
+
+image_full = pygame.transform.scale(pygame.image.load('photo/Full_image.png'),(300,300))
+
+def start():
+    pygame.init()
+    screen = pygame.display.set_mode((1300, 800))
+    #print(f'Длина {len(image)}')
+    rect_arry = []
+
+    for t in range(len(image)):
+        rect_arry.append(image[t].get_rect())
+    #print(f'Длина {len(rect_arry)}')
+    rect_image_full = image[65].get_rect()
+
+
+    width = screen.get_width()
+    height = screen.get_height()
+
+
+    pygame.time.set_timer(pygame.USEREVENT, 1000)
+    time = False
+
+    def lvl_1():
+        clock = pygame.time.Clock()
+        counter, text = 0, '0'.rjust(3)
+        run = True
+        moving = False
+        ss = 0
+        for y in range (len(rect_arry)):
+            rect_arry[y].center = random.randint(100,800),random.randint(100,700)
+            ss += 1
+
+        rect_image_full.center = (1125, 350)
+        font = pygame.font.SysFont(None, 30)
+        smallfont = pygame.font.SysFont('Corbel', 20)
+        color = (0, 0, 0)
+        text_on_button_start = smallfont.render('start timer', True, color)
+        text_on_button_stop = smallfont.render('stop timer', True, color)
+        text_on_button_restart = smallfont.render('restart', True, color)
+        button_start = False
+
+        while run:
+            for i in pygame.event.get():
+                if i.type == pygame.QUIT:
+                    run = False
+                if i.type == pygame.USEREVENT and button_start == True:
+                    counter += 1
+                    text = str(counter).rjust(3)
+                elif i.type == MOUSEBUTTONDOWN:
+                    moving = True
+                elif i.type == MOUSEBUTTONUP:
+                    moving = False
+                elif i.type == MOUSEMOTION and moving:
+                    button_start = True
+                    for n in range (len(rect_arry)):
+                        if rect_arry[n].collidepoint(i.pos):
+                            rect_arry[n].move_ip(i.rel)
+
+                            if 30 >= rect_arry[n].left:
+                                rect_arry[n].move_ip(20,0)
+                            elif 950 <= rect_arry[n].right:
+                                rect_arry[n].move_ip(-20, 0)
+                            elif 30 >= rect_arry[n].top:
+                                rect_arry[n].move_ip(0, 20)
+                            elif 750 <= rect_arry[n].bottom:
+                                rect_arry[n].move_ip(0, -20)
+
+                if i.type == pygame.MOUSEBUTTONDOWN:
+
+                    if 1000 <= mouse[0] <= 1200 and 0 <= mouse[1] <= 100:
+                        button_start = True
+                    elif 1000 <= mouse[0] <= 1200 and 100 <= mouse[1] <= 200:
+                        button_start = False
+                    elif 1000 <= mouse[0] <= 1200 and 600 <= mouse[1] <= 700:
+                        run = False
+                        pygame.quit()
+                        start()
+
+
+
+            screen.fill((100, 0, 0))
+
+            for k in range(len(rect_arry)):
+                screen.blit(image[k], (rect_arry[k].x,rect_arry[k].y))
+
+            pygame.draw.rect(screen, (211, 211, 211), [1050, 40, 125, 40])  #Кнопка
+            pygame.draw.rect(screen, (211, 211, 211), [1050, 90, 125, 40])  #Кнопка
+            pygame.draw.rect(screen, (211, 211, 211), [1050,640, 95, 40])   #Кнопка
+            screen.blit(font.render(text, True, (0, 0, 0)), (30, 30))
+            screen.blit(text_on_button_start, (1070, 50))
+            screen.blit(text_on_button_stop, (1070, 100))
+            screen.blit(text_on_button_restart, (1070, 650))
+            #screen.blit((image_full),rect_image_full)
+            pygame.draw.rect(screen, (255, 255, 255), (30, 30, 1, 720))
+            pygame.draw.rect(screen, (255, 255, 255), (30, 750, 920, 1))
+            pygame.draw.rect(screen, (255, 255, 255), (950, 30, 1, 720))
+            pygame.draw.rect(screen, (255, 255, 255), (30, 30, 920, 1))
+
+            mouse = pygame.mouse.get_pos()
+            pygame.display.update()
+        pygame.quit()
+
+    lvl_1()
+
+#download()
+start()
